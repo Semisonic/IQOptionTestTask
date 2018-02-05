@@ -18,19 +18,20 @@ class MPSCQueue {
     struct Node {
         Node () = default;
         Node (T&& v) : value{std::move(v)} {}
-        ~Node () {
-            delete next.exchange(nullptr, std::memory_order_relaxed);
-        }
 
         std::atomic<Node*> next;
-//        std::unique_ptr<T> value;
         T value;
     };
 
 public:
 
-    MPSCQueue () : stub{new Node()}, head{stub.get()}, tail{stub.get()} {
+    MPSCQueue () : stub{new Node()}, head{stub}, tail{stub} {
         stub->next.store(nullptr);
+    }
+    ~MPSCQueue () {
+        T dummy;
+
+        while (tryPop(dummy));
     }
 
     void push (T&& newVal) {
@@ -42,12 +43,13 @@ public:
     }
 
     bool tryPop (T& val) {
-        std::unique_ptr<Node> head_copy {head.load(std::memory_order_relaxed)};
+        Node* head_copy {head.load(std::memory_order_relaxed)};
         Node* next = head_copy->next.load(std::memory_order_acquire);
 
         if (next != nullptr) {
             head.store(next, std::memory_order_relaxed);
             val = std::move(next->value);
+            delete head_copy;
 
             return true;
         }
@@ -57,7 +59,7 @@ public:
 
 private:
 
-    std::unique_ptr<Node> stub;
+    Node* stub;
     std::atomic<Node*> head;
     std::atomic<Node*> tail;
 };
@@ -72,7 +74,7 @@ private:
 
 struct QueuePack {
     MPSCQueue<ErrorPtr> errorQueue;
-    MPSCQueue<id_t> userIdQueue;
+    MPSCQueue<UserIdPromise> userIdPromiseQueue;
     MPSCQueue<const FullUserData*> userDataQueue;
 };
 
@@ -91,10 +93,10 @@ public:
         if (currentQueueIndex == m_queues.size()) { currentQueueIndex = 0; }
     }
 
-    void enqueueRatingJob (id_t userId) {
+    void enqueueRatingJob (UserIdPromise userIdPromise) {
         static thread_local int currentQueueIndex {0};
 
-        m_queues[currentQueueIndex++].userIdQueue.push(std::move(userId));
+        m_queues[currentQueueIndex++].userIdPromiseQueue.push(std::move(userIdPromise));
 
         if (currentQueueIndex == m_queues.size()) { currentQueueIndex = 0; }
     }
@@ -135,10 +137,10 @@ ErrorPtr JobQueue::QueueConsumer::dequeueError () {
     return errorJob;
 }
 
-id_t JobQueue::QueueConsumer::dequeueUserId () {
-    id_t userId {UserDataConstants::invalidRating};
+UserIdPromise JobQueue::QueueConsumer::dequeueUserIdPromise () {
+    UserIdPromise userId {UserDataConstants::invalidRating, false};
 
-    m_queuePack.userIdQueue.tryPop(userId);
+    m_queuePack.userIdPromiseQueue.tryPop(userId);
 
     return userId;
 }
@@ -168,8 +170,8 @@ void JobQueue::enqueueErrorJob (ErrorPtr &&error) {
     m_impl->enqueueErrorJob(std::move(error));
 }
 
-void JobQueue::enqueueRatingJob (id_t userId) {
-    m_impl->enqueueRatingJob(userId);
+void JobQueue::enqueueRatingJob (UserIdPromise userIdPromise) {
+    m_impl->enqueueRatingJob(userIdPromise);
 }
 
 void JobQueue::enqueueRatingJob (const FullUserData *userData) {

@@ -91,7 +91,7 @@ private:
 class GenericIdMsg {
 public:
 
-    GenericIdMsg () : m_userId(ProtocolConstants::invalidUserId) {}
+    GenericIdMsg () = default;
     GenericIdMsg (id_t userId) : m_userId{userId} {}
 
     void init (BinaryIStream& buffer) {
@@ -106,7 +106,7 @@ public:
 
 private:
 
-    id_t m_userId;
+    id_t m_userId {ProtocolConstants::invalidUserId};
 };
 
 // --------------------------------------------------------------------- //
@@ -115,8 +115,6 @@ class GenericIdNameMsg : public GenericIdMsg {
 public:
 
     using GenericIdMsg::GenericIdMsg;
-
-    GenericIdNameMsg () = default;
 
 #ifdef PASS_NAMES_AROUND
 
@@ -147,10 +145,6 @@ public:
     }
 
     const buffer_t& name () const { return m_userName; }
-
-#else
-
-    GenericIdNameMsg (id_t userId) : GenericIdMsg(userId) {}
 
 #endif // PASS_NAMES_AROUND
 
@@ -207,6 +201,46 @@ class UserDisconnectedMsg : public GenericIdMsg { public: using GenericIdMsg::Ge
 
 // --------------------------------------------------------------------- //
 /*
+ *  UserMsgCodePrefixer class
+ *
+ *  a small utility helper template for writing the message codes to the buffer
+ */
+
+template<class MessageType>
+class UserMsgCodePrefixer {};
+
+template<>
+class UserMsgCodePrefixer<HandshakeMsg> {
+public: static void prefix (BinaryOStream& buffer) { buffer << static_cast<message_code_t>(ProtocolConstants::ClientMessageCode::HANDSHAKE); }
+};
+
+template<>
+class UserMsgCodePrefixer<UserDealWonMsg> {
+public: static void prefix (BinaryOStream& buffer) { buffer << static_cast<message_code_t>(ProtocolConstants::ClientMessageCode::USER_DEAL_WON); }
+};
+
+template<>
+class UserMsgCodePrefixer<UserRegisteredMsg> {
+public: static void prefix (BinaryOStream& buffer) { buffer << static_cast<message_code_t>(ProtocolConstants::ClientMessageCode::USER_REGISTERED); }
+};
+
+template<>
+class UserMsgCodePrefixer<UserRenamedMsg> {
+public: static void prefix (BinaryOStream& buffer) { buffer << static_cast<message_code_t>(ProtocolConstants::ClientMessageCode::USER_RENAMED); }
+};
+
+template<>
+class UserMsgCodePrefixer<UserConnectedMsg> {
+public: static void prefix (BinaryOStream& buffer) { buffer << static_cast<message_code_t>(ProtocolConstants::ClientMessageCode::USER_CONNECTED); }
+};
+
+template<>
+class UserMsgCodePrefixer<UserDisconnectedMsg> {
+public: static void prefix (BinaryOStream& buffer) { buffer << static_cast<message_code_t>(ProtocolConstants::ClientMessageCode::USER_DISCONNECTED); }
+};
+
+// --------------------------------------------------------------------- //
+/*
 *  Outgoing (service-to-client) messages
 */
 // --------------------------------------------------------------------- //
@@ -246,6 +280,8 @@ private:
 class GenericUserIdError : public GenericProtocolError {
 public:
 
+    GenericUserIdError (ProtocolConstants::ProtocolError code) : GenericProtocolError(code) {}
+
     GenericUserIdError (ProtocolConstants::ProtocolError code, id_t userId)
     : GenericProtocolError(code), m_userId {userId} {}
 
@@ -261,11 +297,13 @@ public:
 
 private:
 
-    id_t m_userId;
+    id_t m_userId {ProtocolConstants::invalidUserId};
 };
 
 class UserUnrecognizedError : public GenericUserIdError {
 public:
+
+    UserUnrecognizedError () : GenericUserIdError (ProtocolConstants::ProtocolError::USER_UNRECOGNIZED) {}
 
     UserUnrecognizedError (id_t userId)
     : GenericUserIdError (ProtocolConstants::ProtocolError::USER_UNRECOGNIZED, userId) {}
@@ -273,6 +311,8 @@ public:
 
 class MultipleRegistrationError : public GenericUserIdError {
 public:
+
+    MultipleRegistrationError () : GenericUserIdError(ProtocolConstants::ProtocolError::MULTIPLE_REGISTRATION) {}
 
     MultipleRegistrationError (id_t userId)
     : GenericUserIdError (ProtocolConstants::ProtocolError::MULTIPLE_REGISTRATION, userId) {}

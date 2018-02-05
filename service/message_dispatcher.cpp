@@ -24,7 +24,7 @@ void MessageDispatcher::dispatch (const IpcProto::UserRenamedMsg &msg) {
 
 void MessageDispatcher::dispatch (const IpcProto::UserConnectedMsg &msg) {
     m_buffer->connectionChanges[msg.id()] = DateTime::currentSecondIndex();
-    m_queue.enqueueRatingJob(msg.id());
+    m_queue.enqueueRatingJob(std::make_pair(msg.id(), (m_buffer->usersRegistered.find(msg.id()) != m_buffer->usersRegistered.end())));
 }
 
 void MessageDispatcher::dispatch (const IpcProto::UserDisconnectedMsg &msg) {

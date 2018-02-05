@@ -13,33 +13,39 @@ class TCPGenericSocketTransport {
 public:
 
     TCPGenericSocketTransport () : sock(ios) {}
+    ~TCPGenericSocketTransport () {
+        asio::error_code ec;
+
+        sock.shutdown(asio::ip::tcp::socket::shutdown_both, ec);
+        sock.close(ec);
+    }
 
     bool send (const void* buf, size_t size) {
         asio::error_code ec;
         asio::write(sock, asio::buffer(buf, size), ec);
 
-        return static_cast<bool>(ec);
+        return !static_cast<bool>(ec);
     }
 
     bool send (const buffer_t& buf) {
         asio::error_code ec;
         asio::write(sock, asio::buffer(buf), ec);
 
-        return static_cast<bool>(ec);
+        return !static_cast<bool>(ec);
     }
 
     bool receive (void* buf, int size) {
         asio::error_code ec;
         asio::read(sock, asio::buffer(buf, size), ec);
 
-        return static_cast<bool>(ec);
+        return !static_cast<bool>(ec);
     }
 
     bool receive (buffer_t& buf) {
         asio::error_code ec;
-        asio::write(sock, asio::buffer(buf), ec);
+        asio::read(sock, asio::buffer(buf), ec);
 
-        return static_cast<bool>(ec);
+        return !static_cast<bool>(ec);
     }
 
 protected:
@@ -105,7 +111,7 @@ public:
             throw transport_error_recoverable {};
         }
 
-        storage.resize(ms);
+        storage.resize(ms - sizeof(ms));
 
         if (!m_transport.receive(storage)) {
             throw transport_error_recoverable {};
@@ -219,7 +225,8 @@ public:
         BinaryOStream messageBuffer = createAdaptedMessageBuffer();
         IpcProto::HandshakeMsg msg {IpcProto::ProtocolConstants::version};
 
-        messageBuffer << static_cast<IpcProto::message_code_t>(IpcProto::ProtocolConstants::ClientMessageCode::HANDSHAKE);
+        IpcProto::UserMsgCodePrefixer<decltype(msg)>::prefix(messageBuffer);
+
         msg.store(messageBuffer);
 
         writeMessage(messageBuffer);
@@ -242,5 +249,6 @@ public:
 };
 
 using ServerIpcTransport = ServerSideTransport<TCPServerSocketTransport>;
+using ClientIpcTransport = ClientSideTransport<TCPClientSocketTransport>;
 
 #endif //IQOPTIONTESTTASK_TRANSPORT_H

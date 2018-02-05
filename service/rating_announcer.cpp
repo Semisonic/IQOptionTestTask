@@ -41,16 +41,13 @@ void RatingAnnouncer::doWork () {
             if (!m_ratingExpirationDate.time_since_epoch().count()) {
                 // it's our first run
                 m_ratingExpirationDate = currentWeekStart;
-                std::this_thread::sleep_until(DateTime::nextFullMinute());
-            } else {
-                if (m_ratingExpirationDate != currentWeekStart) {
-                    dropOldRating = true;
-                }
-
-                std::this_thread::sleep_until(DateTime::nextFullSecond());
-
-                chronoSetIndex = DateTime::currentSecondIndex();
+            } else if (m_ratingExpirationDate != currentWeekStart) {
+                dropOldRating = true;
             }
+
+            std::this_thread::sleep_until(DateTime::nextFullSecond());
+
+            chronoSetIndex = DateTime::currentSecondIndex();
         }
 
         auto weekJustTurned {false};

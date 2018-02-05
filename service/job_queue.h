@@ -16,6 +16,7 @@ using ErrorPtr = std::unique_ptr<IpcProto::GenericProtocolError>;
 // --------------------------------------------------------------------- //
 
 struct QueuePack;
+using UserIdPromise = std::pair<id_t, bool>;
 
 class JobQueue {
 
@@ -33,7 +34,7 @@ public:
         QueueConsumer (QueueConsumer&&) = default;
 
         ErrorPtr dequeueError ();
-        id_t dequeueUserId ();
+        UserIdPromise dequeueUserIdPromise ();
         const FullUserData* dequeueUserData ();
 
     private:
@@ -55,7 +56,7 @@ public:
     // push methods
 
     void enqueueErrorJob (ErrorPtr&& error);
-    void enqueueRatingJob (id_t userId);
+    void enqueueRatingJob (UserIdPromise userIdPromise);
     void enqueueRatingJob (const FullUserData* userData);
 
     // pop methods

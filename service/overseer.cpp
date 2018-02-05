@@ -43,7 +43,7 @@ PluggableInfrastructure::PluggableInfrastructure (CoreRatingData& coreData, Core
 , ratingAnnouncer {iterationData, jobQueue,
                    std::make_unique<RatingCalculator>(coreData, syncBlock, iterationData, incomingData, jobQueue),
                    syncBlock.stopSignals, coreData.expirationDate}
-, workerPool {coreData.activeUsers, coreData.rating, syncBlock, transport} {
+, workerPool {coreData, syncBlock, transport} {
     // whew, that was a long initialization list...
     // the complexity is to ensure that each object has access only to the data it actually requires - and nothing more
 }
@@ -61,6 +61,8 @@ void Overseer::run (unsigned short portNumberToBindTo) {
     using ClientMessageCode = IpcProto::ProtocolConstants::ClientMessageCode;
 
     for (;;) {
+        IncomingDataBuffer* inData {nullptr};
+
         try {
             // initializing the service internal modules
             m_pluggable = std::make_unique<PluggableInfrastructure>(m_coreData, m_syncBlock, m_iterationData);
@@ -70,7 +72,7 @@ void Overseer::run (unsigned short portNumberToBindTo) {
             m_pluggable->transport.launch(portNumberToBindTo);
 
             // claiming the current incoming data buffer as in use
-            IncomingDataBuffer* inData = m_pluggable->incomingData.currentBuffer.load(std::memory_order_relaxed);
+            inData = m_pluggable->incomingData.currentBuffer.load(std::memory_order_relaxed);
             inData->bufferWriterCount.fetch_add(1, std::memory_order_relaxed);
 
             // launching the async processing
@@ -109,14 +111,17 @@ void Overseer::run (unsigned short portNumberToBindTo) {
         } catch (const transport_error_recoverable& e) {
             std::cerr << "Overseer exception: recoverable transport error" << std::endl;
 
+            inData->bufferWriterCount.fetch_sub(1, std::memory_order_release);
             m_syncBlock.stopSignals.signalError(false);
         } catch (const std::exception& e) {
             std::cerr << "Overseer exception: " << e.what() << std::endl;
 
+            inData->bufferWriterCount.fetch_sub(1, std::memory_order_release);
             m_syncBlock.stopSignals.signalError();
         } catch (...) {
             std::cerr << "Unknown overseer exception" << std::endl;
 
+            inData->bufferWriterCount.fetch_sub(1, std::memory_order_release);
             m_syncBlock.stopSignals.signalError();
         }
 
@@ -130,5 +135,6 @@ void Overseer::run (unsigned short portNumberToBindTo) {
         }
 
         std::cerr << "Attempting recovery..." << std::endl;
+        m_syncBlock.stopSignals.reset();
     }
 }

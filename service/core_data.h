@@ -74,19 +74,26 @@ struct CoreRatingData {
 
 struct SystemStopSignals {
     void signalError (bool unrecoverable = true) {
-        if (unrecoverable) unrecoverableError.store(true, std::memory_order_relaxed);
+        if (unrecoverable) {
+            unrecoverableError.store(true, std::memory_order_relaxed);
+        }
         badFlag.store(true, std::memory_order_relaxed);
     }
 
-    std::atomic_bool unrecoverableError;
-    std::atomic_bool badFlag;
+    void reset () {
+        unrecoverableError.store(false, std::memory_order_relaxed);
+        badFlag.store(false, std::memory_order_relaxed);
+    }
+
+    std::atomic_bool unrecoverableError {false};
+    std::atomic_bool badFlag {false};
 };
 
 struct CoreDataSyncBlock {
     std::mutex dataLock;
     std::condition_variable dataRefreshedTrigger;
-    std::atomic_bool refreshInProgress;
-    std::atomic_int dataReaderCount;
+    std::atomic_bool refreshInProgress {false};
+    std::atomic_int dataReaderCount {0};
 
     SystemStopSignals stopSignals;
 };

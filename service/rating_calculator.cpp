@@ -1,6 +1,7 @@
 #include <cassert>
 #include <algorithm>
 #include <cstring>
+#include <iostream>
 #include "rating_calculator.h"
 #include "core_data.h"
 #include "job_queue.h"
@@ -87,7 +88,7 @@ private:
         assert(pos < m_userData.rating.size() &&
                length > 0 &&
                offset > 0 &&
-               pos + length + offset < m_userData.rating.size());
+               pos + length + offset <= m_userData.rating.size());
 
         FullUserData** source = m_userData.rating.data() + pos;
         FullUserData** dest = source + offset;
@@ -148,7 +149,7 @@ void RatingCalculatorImpl::recalculate (bool dropOldRating) {
 
             ratingMoveBlock(oldRatingVectorSize - ratingPatch.elementsAfter + 1, blockLength, offset);
             ++offset;
-        } else if (ratingPatch.changeType == RatingChangeType::NewPosition) {
+        } else {
             blockLength = ratingPatch.elementsAfter - lengthDone - oldPositions;
             lengthDone += blockLength;
 
@@ -166,8 +167,8 @@ void RatingCalculatorImpl::recalculate (bool dropOldRating) {
 // --------------------------------------------------------------------- //
 
 void RatingCalculatorImpl::dropRating () {
-    for (auto& activeUser : m_userData.activeUsers) {
-        m_userData.silentUsers.insert(std::make_pair(activeUser.first, BasicUserData(std::move(*activeUser.second.get()))));
+    for (const auto& activeUser : m_userData.activeUsers) {
+        m_userData.silentUsers.emplace(activeUser.first, BasicUserData(std::move(*activeUser.second.get())));
     }
 
     m_userData.activeUsers.clear();
@@ -182,9 +183,7 @@ void RatingCalculatorImpl::dropRating () {
 // --------------------------------------------------------------------- //
 
 void RatingCalculatorImpl::processRegistrations () {
-    auto freshDeal = m_incomingBuffer.dealsWon.end();
-
-    for (auto& newReg : m_incomingBuffer.usersRegistered) {
+    for (auto newReg : m_incomingBuffer.usersRegistered) {
         BasicUserData newSilentUser;
         id_t userId = UserDataConstants::invalidId;
 
@@ -204,7 +203,7 @@ void RatingCalculatorImpl::processRegistrations () {
 #ifdef PASS_NAMES_AROUND
         newSilentUser.name = std::move(newReg.second);
 #endif
-        m_userData.silentUsers.insert(std::make_pair(userId, std::move(newSilentUser)));
+        m_userData.silentUsers.emplace(userId, std::move(newSilentUser));
     }
 
     m_incomingBuffer.usersRegistered.clear();
@@ -260,7 +259,7 @@ void RatingCalculatorImpl::processConnectionChanges () {
 
             if (second < 60) {
                 // user reconnected back, putting him where he belongs
-                m_iterationData.usersOnline[second].insert(activeUser->second.get());
+                m_iterationData.usersOnline[second].emplace(activeUser->second.get());
             }
 
             continue;
@@ -293,14 +292,11 @@ void RatingCalculatorImpl::processDeals () {
 
             auto userProfile = activeUser->second.get();
 
-            m_ratingPatches.insert(RatingPatchEntry(static_cast<int>(m_userData.rating.size()) - userProfile->rating - 1));
-
-            userProfile->amountWon += newDeal.second;
-
-            m_ratingPatches.insert(RatingPatchEntry(userProfile,
-                                                    ratingElementsAfter(userProfile->amountWon),
-                                                    RatingChangeType::NewPosition,
-                                                    userProfile->amountWon));
+            m_ratingPatches.emplace(static_cast<int>(m_userData.rating.size()) - userProfile->rating - 1);
+            m_ratingPatches.emplace(userProfile,
+                                    ratingElementsAfter(userProfile->amountWon),
+                                    RatingChangeType::NewPosition,
+                                    userProfile->amountWon + newDeal.second);
             continue;
         }
 
@@ -319,18 +315,22 @@ void RatingCalculatorImpl::processDeals () {
 
             ++m_freshRatings;
 
-            m_ratingPatches.insert(RatingPatchEntry(userProfile.get(),
-                                                    ratingElementsAfter(userProfile->amountWon),
-                                                    RatingChangeType::NewPosition,
-                                                    userProfile->amountWon));
-            m_userData.activeUsers.insert(std::make_pair(newDeal.first, std::move(userProfile)));
+            m_ratingPatches.emplace(userProfile.get(),
+                                    ratingElementsAfter(userProfile->amountWon),
+                                    RatingChangeType::NewPosition,
+                                    userProfile->amountWon);
+            m_userData.activeUsers.emplace(newDeal.first, std::move(userProfile));
             m_userData.silentUsers.erase(silentUser);
+
+            continue;
         }
 
         // protocol error, trying to process a deal on a user not previously registered
         ErrorPtr error {new IpcProto::UserUnrecognizedError {newDeal.first}};
         m_jobQueue.enqueueErrorJob(std::move(error));
     }
+
+    m_incomingBuffer.dealsWon.clear();
 }
 
 // --------------------------------------------------------------------- //
@@ -342,9 +342,9 @@ void RatingCalculatorImpl::processDeals () {
 RatingCalculator::RatingCalculator (CoreRatingData& userData, CoreDataSyncBlock& coreSync,
                                     IterationData& iterationData, IncomingDataDoubleBuffer& incomingData,
                                     JobQueue& jobQueue)
-: m_userData(userData), m_coreSync(coreSync)
-, m_iterationData(iterationData) , m_incomingData(incomingData)
-, m_jobQueue(jobQueue) {
+: m_userData {userData}, m_coreSync {coreSync}
+, m_iterationData {iterationData} , m_incomingData {incomingData}
+, m_jobQueue {jobQueue} {
 }
 
 void RatingCalculator::recalculate (bool dropOldRating) {

@@ -13,7 +13,7 @@ struct RatingBufferData;
 class WorkerPool {
 public:
 
-    WorkerPool (const ActiveUsersMap& users, const RatingVector& rating, CoreDataSyncBlock& syncBlock,
+    WorkerPool (const CoreRatingData& coreData, CoreDataSyncBlock& syncBlock,
                 ServerIpcTransport& transport);
     ~WorkerPool ();
 
@@ -26,7 +26,7 @@ private:
     bool depleteUserDataMessages (RatingBufferData& bufferData, JobQueue::QueueConsumer& consumer);
 
     void processRating (RatingBufferData& bufferData, const FullUserData* userData);
-    void processRating (RatingBufferData& bufferData, id_t userId);
+    bool processRating (RatingBufferData& bufferData, UserIdPromise userIdPromise);
     void processError (BinaryOStream& buffer, BinaryOStream::pos_t pos, const ErrorPtr& error);
 
     void cacheTopRatings (RatingBufferData& bufferData);
@@ -35,8 +35,7 @@ private:
 
 private:
 
-    const ActiveUsersMap& m_users;
-    const RatingVector& m_rating;
+    const CoreRatingData& m_coreData;
     CoreDataSyncBlock& m_syncBlock;
     ServerIpcTransport& m_transport;
 
