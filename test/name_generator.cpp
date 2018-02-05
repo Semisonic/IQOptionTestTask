@@ -24,7 +24,10 @@ std::string NameGenerator::newName () {
 
     std::ostringstream oss;
 
-    oss << names[nameIndex++] << " " << lastNames[lastNameIndex++] << dis(gen);
+    oss << names[nameIndex++] << " " << lastNames[lastNameIndex++] << " " << dis(gen);
+
+    if (nameIndex == 23) nameIndex = 0;
+    if (lastNameIndex == 31) lastNameIndex = 0;
 
     return oss.str();
 }

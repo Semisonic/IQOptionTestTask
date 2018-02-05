@@ -217,7 +217,7 @@ void RatingCalculatorImpl::processRenames () {
         auto activeUser = m_userData.activeUsers.find(newName.first);
 
         if (activeUser != m_userData.activeUsers.end()) {
-            activeUser.second->name = std::move(newName.second);
+            activeUser->second->name = std::move(newName.second);
 
             continue;
         }
@@ -225,13 +225,14 @@ void RatingCalculatorImpl::processRenames () {
         auto silentUser = m_userData.silentUsers.find(newName.first);
 
         if (silentUser != m_userData.silentUsers.end()) {
-            silentUser->name = std::move(newName.second);
+            silentUser->second.name = std::move(newName.second);
 
             continue;
         }
 
         // protocol error, trying to rename a user not previously registered
-        m_jobQueue.enqueueError(USER_UNRECOGNIZED, newName.first);
+        ErrorPtr error {new IpcProto::UserUnrecognizedError {newName.first}};
+        m_jobQueue.enqueueErrorJob(std::move(error));
     }
 
     m_incomingBuffer.usersRenamed.clear();

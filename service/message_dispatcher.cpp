@@ -10,7 +10,7 @@ void MessageDispatcher::setBuffer (IncomingDataBuffer& buffer) { m_buffer = &buf
 
 void MessageDispatcher::dispatch (const IpcProto::UserRegisteredMsg &msg) {
 #ifdef PASS_NAMES_AROUND
-    m_buffer.usersRegistered[msg.id()] = msg.name();
+    m_buffer->usersRegistered.emplace(msg.id(), msg.name());
 #else
     m_buffer->usersRegistered.insert(msg.id());
 #endif
@@ -18,7 +18,7 @@ void MessageDispatcher::dispatch (const IpcProto::UserRegisteredMsg &msg) {
 
 void MessageDispatcher::dispatch (const IpcProto::UserRenamedMsg &msg) {
 #ifdef PASS_NAMES_AROUND
-    m_buffer.usersRenamed[msg.id()] = msg.name();
+    m_buffer->usersRenamed.emplace(msg.id(), msg.name());
 #endif
 }
 

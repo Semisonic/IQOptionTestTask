@@ -407,15 +407,8 @@ private:
         }
 
         // ratingPlace by now is a rating length
-        auto proc2 = [ratingPlace](FullUserData* ud) { ud->rating = ratingPlace; };
+        auto proc2 = [](FullUserData* ud) { ud->rating = UserDataConstants::invalidRating; };
         forEachInMaps(MapIndexSet {2, 3}, proc2);
-
-        // self-test
-        for (auto test : m_index) {
-            if (test.second->rating < 0) {
-                assert(false);
-            }
-        }
     }
 
     void publishValidationReport () {

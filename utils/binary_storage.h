@@ -50,6 +50,7 @@ public:
         }
 
         memcpy(data.data(), m_storage.data() + m_curPos, size);
+        m_curPos += size;
 
         return *this;
     }
