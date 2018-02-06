@@ -10,6 +10,7 @@
 struct FullUserDataEx : public FullUserData {
     bool ratingReceived {false};
     std::list<monetary_t> winningsHistory;
+    std::list<std::string> nameList;
 };
 
 constexpr int historyLength = 6;
@@ -24,7 +25,6 @@ struct ValidationReport {
     int validErrors {0};
 
     struct {
-        int timingMissedWithinSecond {0};
         int outdatedWinnings {0};
     } almostValidRatings;
 
@@ -35,7 +35,6 @@ struct ValidationReport {
         int userPositionWrong {0};
         int topPositionsWrong {0};
         int surroundingsWrong {0};
-        int timingMessed {0};
     } invalidRatings;
 
     int failures {0};
@@ -181,6 +180,12 @@ public:
 
         assert(userData != m_index.end());
 
+        userData->second->nameList.push_back(userData->second->name);
+
+        if (userData->second->nameList.size() > historyLength) {
+            userData->second->nameList.pop_front();
+        }
+
         userData->second->name = newName;
 
         return userData->second;
@@ -312,19 +317,6 @@ public:
         if (userData != m_index.end()) {
             userData->second->ratingReceived = true;
 
-            // 6) check timing
-            if (userData->second->secondConnected != currentSecond) {
-                if (std::abs(currentSecond - userData->second->secondConnected) == 1) {
-                    ++m_report.almostValidRatings.timingMissedWithinSecond;
-                } else {
-                    failure = true;
-                    ++m_report.invalidRatings.timingMessed;
-                    std::cout << "! Rating error: invalid timing ("
-                              << int{currentSecond} << " instead of " << int{userData->second->secondConnected} << ")" << std::endl;
-                }
-
-            }
-
             if (userData->second->rating != UserDataConstants::invalidRating) {
                 // user wasn't added after the rating had been recalculated
                 if (userData->second->rating != rating.getRatingPos()) {
@@ -361,7 +353,7 @@ public:
                     failure = true;
                     ++m_report.invalidRatings.topPositionsWrong;
 
-                    reportSingleRating(ratings[i], i, result, "top user");
+                    //reportSingleRating(ratings[i], i, result, "top user");
                 }
             }
         }
@@ -378,7 +370,7 @@ public:
                     failure = true;
                     ++m_report.invalidRatings.surroundingsWrong;
 
-                    reportSingleRating(ratings[i], expectedPlace, result, "surrounding user");
+                    //reportSingleRating(ratings[i], expectedPlace, result, "surrounding user");
                 }
             }
         }
@@ -427,7 +419,6 @@ private:
                   << "* Incoming errors: " << m_report.incomingErrors << std::endl
                   << "* Valid errors: " << m_report.validErrors << std::endl
                   << "** Almost valid ratings **" << std::endl
-                  << "* Time missed for less than a second: " << m_report.almostValidRatings.timingMissedWithinSecond << std::endl
                   << "* Winnings outdated but correct: " << m_report.almostValidRatings.outdatedWinnings << std::endl
                   << "*********** !!! Failures !!! ***********" << std::endl
                   << "* Invalid ratings: " << m_report.incomingRatings - m_report.validRatings << std::endl
@@ -442,7 +433,6 @@ private:
                   << "* User position wrong: " << m_report.invalidRatings.userPositionWrong << std::endl
                   << "* Top positions wrong: " << m_report.invalidRatings.topPositionsWrong << std::endl
                   << "* Surroundings wrong: " << m_report.invalidRatings.surroundingsWrong << std::endl
-                  << "* Timing wrong: " << m_report.invalidRatings.timingMessed << std::endl
                   << "********************** Report end **********************" << std::endl;
     }
 
@@ -522,8 +512,13 @@ private:
         }
 
 #ifdef PASS_NAMES_AROUND
-        if (userData->second->name != std::string((char*)rating.name.data(), rating.name.size())) {
-            result |= 8;
+        std::string newName {(char*)rating.name.data(), rating.name.size()};
+        if (userData->second->name != newName) {
+            auto history = std::find(userData->second->nameList.rbegin(), userData->second->nameList.rend(), newName);
+
+            if (history == userData->second->nameList.rend()) {
+                result |= 8;
+            }
         }
 #endif
         return result;

@@ -13,7 +13,7 @@ class Strategy {
 public:
 
     struct StrategyConfig {
-        int usersAtStart {20};
+        int usersAtStart {100};
 
         // per minute changes (based on the amount of users/eligible users)
         double newUsers {1./15};

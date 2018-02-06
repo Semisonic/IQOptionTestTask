@@ -20,8 +20,7 @@ enum MessageCode {
 };
 
 using MessageRequestList = std::list<MessageCode>;
-// 50 is to leave the last 10 seconds unoccupied and prevent test failures because of client and service being out of sync
-using MessageMinuteMap = std::array<MessageRequestList, 50>;
+using MessageMinuteMap = std::array<MessageRequestList, 60>;
 
 struct Strategy::MessageDistribution {
     MessageMinuteMap distrib;
@@ -72,12 +71,12 @@ void Strategy::run (const std::string& host, const std::string& port) {
 
         std::this_thread::sleep_until(DateTime::nextFullSecond());
         auto currentSecond = DateTime::currentSecondIndex();
+        auto steadyIntervalStart = std::chrono::steady_clock::now();
 
         for (;;) {
             generateNewDistribution(currentSecond);
-            auto steadyIntervalStart = std::chrono::steady_clock::now();
 
-            for (; currentSecond < 50 && !m_badFlag.load(std::memory_order_relaxed); ++currentSecond) {
+            for (; currentSecond < 60 && !m_badFlag.load(std::memory_order_relaxed); ++currentSecond) {
                 for (auto newMsg : m_distrib->distrib[currentSecond]) {
                     messageBuffer.rewind(pos);
                     switch (newMsg) {
@@ -210,9 +209,9 @@ void Strategy::run (const std::string& host, const std::string& port) {
                 break;
             }
 
-            std::this_thread::sleep_until(DateTime::nextFullMinute());
+            std::this_thread::sleep_until(DateTime::nextFullSecond());
             steadyIntervalStart = std::chrono::steady_clock::now();
-            currentSecond = 0;
+            currentSecond = DateTime::currentSecondIndex();
 
             { std::lock_guard lg(m_dataAccess); m_prevMinData.setNextMinuteData(m_curMinData); }
         }
@@ -241,12 +240,12 @@ void Strategy::run (const std::string& host, const std::string& port) {
 
 void Strategy::generateNewDistribution (unsigned char currentSecond) {
     m_distrib.reset(new MessageDistribution);
-    std::uniform_int_distribution<> dis(currentSecond, 49);
+    std::uniform_int_distribution<> dis(currentSecond, 59);
 
     // new users
     {
         int count = m_curMinData.getUserGroupSize(static_cast<unsigned int>(UserDataStorage::UserFlags::ANYONE))
-                    * m_config.newUsers * (50 - currentSecond) / 50.;
+                    * m_config.newUsers * (60 - currentSecond) / 60.;
 
         for (auto i = 0; i < count; ++i) {
             m_distrib->distrib[dis(m_gen)].emplace_back(MC_USER_REGISTERED);
@@ -256,7 +255,7 @@ void Strategy::generateNewDistribution (unsigned char currentSecond) {
     // renames
     {
         int count = m_curMinData.getUserGroupSize(static_cast<unsigned int>(UserDataStorage::UserFlags::ANYONE))
-                    * m_config.renames * (50 - currentSecond) / 50.;
+                    * m_config.renames * (60 - currentSecond) / 60.;
 
         for (auto i = 0; i < count; ++i) {
             m_distrib->distrib[dis(m_gen)].emplace_back(MC_USER_RENAMED);
@@ -266,7 +265,7 @@ void Strategy::generateNewDistribution (unsigned char currentSecond) {
     // connects
     {
         int count = m_curMinData.getUserGroupSize(static_cast<unsigned int>(UserDataStorage::UserFlags::DISCONNECTED_ANY))
-                    * m_config.connects * (50 - currentSecond) / 50.;
+                    * m_config.connects * (60 - currentSecond) / 60.;
 
         for (auto i = 0; i < count; ++i) {
             m_distrib->distrib[dis(m_gen)].emplace_back(MC_USER_CONNECTED);
@@ -276,7 +275,7 @@ void Strategy::generateNewDistribution (unsigned char currentSecond) {
     // disconnects
     {
         int count = m_curMinData.getUserGroupSize(static_cast<unsigned int>(UserDataStorage::UserFlags::CONNECTED_ANY))
-                    * m_config.disconnects * (50 - currentSecond) / 50.;
+                    * m_config.disconnects * (60 - currentSecond) / 60.;
 
         for (auto i = 0; i < count; ++i) {
             m_distrib->distrib[dis(m_gen)].emplace_back(MC_USER_DISCONNECTED);
@@ -286,7 +285,7 @@ void Strategy::generateNewDistribution (unsigned char currentSecond) {
     // deals won
     {
         int count = m_curMinData.getUserGroupSize(static_cast<unsigned int>(UserDataStorage::UserFlags::CONNECTED_ANY))
-                    * m_config.wonDeals * (50 - currentSecond) / 50.;
+                    * m_config.wonDeals * (60 - currentSecond) / 60.;
 
         for (auto i = 0; i < count; ++i) {
             m_distrib->distrib[dis(m_gen)].emplace_back(MC_USER_DEAL_WON);
@@ -296,7 +295,7 @@ void Strategy::generateNewDistribution (unsigned char currentSecond) {
     // fake users
     {
         int count = m_curMinData.getUserGroupSize(static_cast<unsigned int>(UserDataStorage::UserFlags::ANYONE))
-                    * m_config.fakeUserOperations * (50 - currentSecond) / 50.;
+                    * m_config.fakeUserOperations * (60 - currentSecond) / 60.;
 
         for (auto i = 0; i < count; ++i) {
             m_distrib->distrib[dis(m_gen)].emplace_back(MC_FAKE_USER);

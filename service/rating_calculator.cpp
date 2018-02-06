@@ -25,6 +25,7 @@ struct RatingPatchEntry {
     FullUserData* userData { nullptr };
     int elementsAfter;
     RatingChangeType changeType { RatingChangeType::OldPosition };
+    monetary_t amountWon { 0 };
 
     bool operator< (const RatingPatchEntry& right) const {
         return (elementsAfter != right.elementsAfter)
@@ -33,10 +34,6 @@ struct RatingPatchEntry {
                     ? changeType < right.changeType
                     : amountWon < right.amountWon);
     }
-
-private:
-
-    monetary_t amountWon { 0 };
 };
 
 using RatingPatchSet = std::multiset<RatingPatchEntry>;
@@ -140,24 +137,28 @@ void RatingCalculatorImpl::recalculate (bool dropOldRating) {
     auto lengthDone = 0;
 
     for (auto& ratingPatch : m_ratingPatches) {
-        int blockLength = 0;
+        auto blockLength = 0;
+        auto position = oldRatingVectorSize - ratingPatch.elementsAfter;
 
         if (ratingPatch.changeType == RatingChangeType::OldPosition) {
             blockLength = ratingPatch.elementsAfter - lengthDone - oldPositions;
             ++oldPositions;
             lengthDone += blockLength;
 
-            ratingMoveBlock(oldRatingVectorSize - ratingPatch.elementsAfter + 1, blockLength, offset);
+            ratingMoveBlock(position, blockLength, offset);
             ++offset;
         } else {
             blockLength = ratingPatch.elementsAfter - lengthDone - oldPositions;
             lengthDone += blockLength;
 
-            int position = oldRatingVectorSize - ratingPatch.elementsAfter;
-
             ratingMoveBlock(position, blockLength, offset);
             --offset;
             ratingInsert(position + offset, ratingPatch.userData);
+
+            // this line is important because only after the rating is rebuilt we can add the new winnings
+            // to the positions not inserted but updated, otherwise the updated winnings will mess with the
+            // rating sort/patch preparation algorithm
+            ratingPatch.userData->amountWon = ratingPatch.amountWon;
         }
     }
 
@@ -295,7 +296,7 @@ void RatingCalculatorImpl::processDeals () {
 
             m_ratingPatches.emplace(static_cast<int>(m_userData.rating.size()) - userProfile->rating - 1);
             m_ratingPatches.emplace(userProfile,
-                                    ratingElementsAfter(userProfile->amountWon),
+                                    ratingElementsAfter(userProfile->amountWon + newDeal.second),
                                     RatingChangeType::NewPosition,
                                     userProfile->amountWon + newDeal.second);
             continue;
@@ -311,7 +312,7 @@ void RatingCalculatorImpl::processDeals () {
 
             if (userProfile->secondConnected != UserDataConstants::invalidSecond) {
                 // user is connected, should put him onto the announcement list
-                m_iterationData.usersOnline[userProfile->secondConnected].insert(userProfile.get());
+                m_iterationData.usersOnline[userProfile->secondConnected].emplace(userProfile.get());
             }
 
             ++m_freshRatings;

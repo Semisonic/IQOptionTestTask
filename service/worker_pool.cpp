@@ -21,6 +21,8 @@ WorkerPool::~WorkerPool () {
             if (workerHandle.valid()) {
                 workerHandle.get();
             }
+        } catch (const transport_error_recoverable&) {
+            std::cerr << "Worker pool exception: recoverable trasport error" << std::endl;
         } catch (const std::exception& e) {
             std::cerr << "Worker pool exception: " << e.what() << std::endl;
         } catch (...) {
